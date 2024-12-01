@@ -1,3 +1,5 @@
+
+
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -11,14 +13,14 @@ dotenv.config();
 
 // Validate critical environment variables
 const requiredEnvVars = [
-  'OPENAI_API_KEY', 
-  'AWS_ACCESS_KEY_ID', 
-  'AWS_SECRET_ACCESS_KEY', 
-  'AWS_REGION', 
-  'AWS_BUCKET_NAME'
+  "OPENAI_API_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_REGION",
+  "AWS_BUCKET_NAME",
 ];
-
-requiredEnvVars.forEach(varName => {
+console.log(process.env.OPENAI_API_KEY)
+requiredEnvVars.forEach((varName) => {
   if (!process.env[varName]) {
     console.error(`Missing critical environment variable: ${varName}`);
     process.exit(1);
@@ -44,32 +46,24 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Multer configuration with enhanced file validation
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB file size limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG and GIF images are allowed.'));
+      cb(new Error("Invalid file type. Only JPEG, PNG, and GIF images are allowed."));
     }
-  }
+  },
 });
 
 // Endpoint for analyzing images
 app.post("/analyze-images", upload.array("files", 3), async (req, res) => {
   try {
-    // Log uploaded files
-    console.log('Uploaded Files:', req.files.map(file => ({
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      bufferLength: file.buffer.length
-    })));
-
     // Validate 3 images are uploaded
     if (!req.files || req.files.length !== 3) {
       return res.status(400).json({
@@ -82,10 +76,6 @@ app.post("/analyze-images", upload.array("files", 3), async (req, res) => {
       req.files.map(async (file, index) => {
         const fileBuffer = file.buffer;
         const fileName = `images/face-${Date.now()}-${index + 1}.jpg`;
-        console.log(`Uploading file ${index + 1}:`, {
-          fileName,
-          bufferLength: fileBuffer.length
-        });
         return uploadFileToS3(fileBuffer, fileName);
       })
     );
@@ -97,8 +87,7 @@ app.post("/analyze-images", upload.array("files", 3), async (req, res) => {
     }));
 
     // Skin analysis prompt
-   // Detailed prompt with explicit JSON instructions
-   const skinAnalysisPrompt = `
+    const skinAnalysisPrompt = `
 You are a highly advanced skin analysis expert. Your task is to assess the quality of a subject's skin based on an input image. Evaluate the following attributes, providing a score out of 100 for each, where higher scores indicate better skin quality. Include a brief explanation of your assessment. Follow these detailed guidelines:
 
 
@@ -189,67 +178,51 @@ Example Explanation: "Overall skin quality is good, with slight redness and mild
       presence_penalty: 0,
     });
 
-    // Extract response content
+
+    // Parse response content
     const responseContent = openaiResponse.choices[0].message.content;
-    console.log('Response Content:', responseContent);
-
-    // Attempt to parse JSON directly
-    let scores;
-    try {
-      scores = JSON.parse(responseContent);
-    } catch (parseError) {
-      console.error('JSON Parsing Error:', parseError);
-      return res.status(500).json({
-        message: "Failed to parse analysis results",
-        error: parseError.message,
-        rawResponse: responseContent
-      });
-    }
-
-    // Validate JSON structure
-    if (!scores.Redness || !scores.Hydration || !scores.Pores || !scores.Acne || !scores["Overall Skin Quality"]) {
-      return res.status(500).json({
-        message: "Incomplete analysis results",
-        rawResponse: responseContent
-      });
-    }
+    const scores = JSON.parse(responseContent);
 
     // Send successful response
     res.status(200).json({
       message: "Images analyzed successfully",
       images: imageDescriptions,
-      scores: scores,
+      scores,
     });
-
   } catch (error) {
-    // Comprehensive error logging
-    console.error("Detailed Error:", {
-      message: error.message,
-      name: error.name,
-      stack: error.stack,
-      response: error.response ? JSON.stringify(error.response) : 'No response object'
-    });
-
+    console.error("Error during analysis:", error);
     res.status(500).json({
       message: "An unexpected error occurred while processing images",
-      error: process.env.NODE_ENV !== 'production' ? error.message : 'Internal Server Error'
+      error: process.env.NODE_ENV !== "production" ? error.message : "Internal Server Error",
     });
   }
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get("/health", (req, res) => {
   res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString()
+    status: "healthy",
+    timestamp: new Date().toISOString(),
   });
 });
 
+// Email submission endpoint
+app.post("/api/submit", (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  console.log("Received email:", email);
+  res.status(200).json({ message: "Email submitted successfully" });
+});
+
 // 404 handler
-app.use((req, res, next) => {
+app.use((req, res) => {
   res.status(404).json({
-    message: 'Route not found',
-    path: req.path
+    message: "Route not found",
+    path: req.path,
   });
 });
 
@@ -257,8 +230,8 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
-    message: 'An unexpected error occurred',
-    error: process.env.NODE_ENV === 'production' ? {} : err.message
+    message: "An unexpected error occurred",
+    error: process.env.NODE_ENV === "production" ? {} : err.message,
   });
 });
 
@@ -268,10 +241,10 @@ const server = app.listen(port, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+process.on("SIGTERM", () => {
+  console.log("SIGTERM signal received: closing HTTP server");
   server.close(() => {
-    console.log('HTTP server closed');
+    console.log("HTTP server closed");
     process.exit(0);
   });
 });
